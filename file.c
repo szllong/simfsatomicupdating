@@ -361,8 +361,7 @@ static int nvmm_consistency_function(struct super_block *sb, struct inode *norma
 	struct nvmm_sb_info *nsi = NVMM_SB(sb);
 	struct inode *root_i = nvmm_iget(sb, NVMM_ROOT_INO);
 	loff_t size = i_size_read(normal_i);
-	consistency_i = nvmm_new_inode(root_i, 0, NULL);
-	consistency_i->i_mode = cpu_to_le16(nsi->mode | S_IFREG);
+	consistency_i = NVMM_SB(sb)->consistency_i;
 	con_nvmm_inode = nvmm_get_inode(sb, consistency_i->i_ino);
 	if(!con_nvmm_inode->i_pg_addr)
 		nvmm_init_pg_table(sb, consistency_i->i_ino);
@@ -430,9 +429,7 @@ static int nvmm_consistency_function(struct super_block *sb, struct inode *norma
 
 	//6. delete temp file inode
 	nvmm_destroy_mapping(consistency_i);
-	consistency_i->__i_nlink = 0;
-	consistency_i->i_state |= I_FREEING;
-	nvmm_evict_inode(consistency_i);
+	nvmm_rm_pg_table(sb, consistency_i->i_ino)；
 	if(0x7ffffff == page_num_mask){
 		pud_t *pud = nvmm_get_pud(sb, normal_i->i_ino);
 		nvmap(normal_vaddr, pud, current->mm);
