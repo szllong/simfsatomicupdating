@@ -139,8 +139,14 @@ static size_t nvmm_iov_copy_to(void *from, struct iov_iter *i, size_t bytes)
 static int nvmm_open_file(struct inode *inode, struct file *filp)
 {
 	int errval = 0;
+	struct inode *consistency_i;
+	struct super_block *sb;
+	sb = inode->i_sb;
+	consistency_i = NVMM_SB(sb)->consistency_i;
 //	pid_t pid = current->pid;
 	errval = nvmm_establish_mapping(inode);
+	errval = nvmm_establish_mapping(consistency_i);
+	nvmm_init_pg_table(sb, consistency_i->i_ino);
 //	printk("the process pid is : %d\n", pid);
 	if(errval){
 		nvmm_error(inode->i_sb, __FUNCTION__, "can't establish mapping\n");
@@ -161,12 +167,20 @@ static int nvmm_release_file(struct file * file)
     struct inode *inode = file->f_mapping->host;
 	struct nvmm_inode_info *ni_info;
 	unsigned long vaddr;
+	struct super_block *sb;
+	struct inode *consistency_i;
 	int err = 0;
+	sb = inode->i_sb;
+	consistency_i = NVMM_SB(sb)->consistency_i;
 	ni_info = NVMM_I(inode);
 	vaddr = (unsigned long)ni_info->i_virt_addr;
 	if(vaddr){
-		if(atomic_dec_and_test(&ni_info->i_p_counter))
+		if(atomic_dec_and_test(&ni_info->i_p_counter)){
 			err = nvmm_destroy_mapping(inode);
+			err = nvmm_destroy_mapping(consistency_i);
+			nvmm_rm_pg_table(sb, consistency_i->i_ino);
+			consistency_i->i_blocks = 0;
+		}
 
 //		printk("release, ino = %ld, process num = %d, vaddr = %lx\n", inode->i_ino, (ni_info->i_p_counter).counter, vaddr);
 
@@ -255,7 +269,9 @@ static int nvmm_alloc_consistency_file_pages(struct inode *consistency_i , loff_
 	pages_to_alloc &= page_num_mask;
 	if(0 == pages_to_alloc)
 		pages_to_alloc = (1 == page_num_mask) ? page_num_mask : (page_num_mask + 1);
-	retval = nvmm_alloc_blocks(consistency_i, pages_to_alloc);
+
+	if(consistency_i->i_blocks < pages_to_alloc)
+		retval = nvmm_alloc_blocks(consistency_i, pages_to_alloc);
 	return retval;
 }
 
@@ -363,7 +379,6 @@ static int nvmm_consistency_function(struct super_block *sb, struct inode *norma
 	con_nvmm_inode = nvmm_get_inode(sb, consistency_i->i_ino);
 	if(!con_nvmm_inode->i_pg_addr)
 		nvmm_init_pg_table(sb, consistency_i->i_ino);
-	retval = nvmm_establish_mapping(consistency_i);
 	consistency_i_info = NVMM_I(consistency_i);
 	normal_i_info = NVMM_I(normal_i);
 	normal_vaddr = (unsigned long)normal_i_info->i_virt_addr;
@@ -426,9 +441,6 @@ static int nvmm_consistency_function(struct super_block *sb, struct inode *norma
 	nvmm_atomic_update_pointer(sb, normal_i, consistency_i, offset, page_num_mask);	
 
 	//6. delete temp file inode
-	nvmm_destroy_mapping(consistency_i);
-	nvmm_rm_pg_table(sb, consistency_i->i_ino)；
-	consistency_i->i_blocks = 0;
 	if(0x7ffffff == page_num_mask){
 		pud_t *pud = nvmm_get_pud(sb, normal_i->i_ino);
 		nvmap(normal_vaddr, pud, current->mm);
