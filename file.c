@@ -20,9 +20,6 @@
 #include "xip.h"
 #include "xattr.h"
 
-#define PUD_SIZE_1 (PUD_SIZE - 1)
-#define PMD_SIZE_1 (PMD_SIZE  -1)
-#define PAGE_SIZE_1 (PAGE_SIZE - 1)
 
 /*
  * input :
@@ -261,9 +258,9 @@ static int nvmm_alloc_consistency_file_pages(struct inode *consistency_i , loff_
 	size_t end_length = offset + length;
 
 	if(end_length >= size){
-		pages_to_alloc = (end_length + PAGE_SIZE_1) >> PAGE_SHIFT;
+		pages_to_alloc = (end_length + PAGE_SIZE - 1) >> PAGE_SHIFT;
 	}else{
-		pages_to_alloc = (size + PAGE_SIZE_1) >> PAGE_SHIFT;
+		pages_to_alloc = (size + PAGE_SIZE - 1) >> PAGE_SHIFT;
 	}
 	
 	pages_to_alloc &= page_num_mask;
@@ -357,6 +354,10 @@ static void nvmm_atomic_update_pointer(struct super_block *sb, struct inode *nor
 	}
 }
 
+/**
+ * delete file pages
+ */
+
 
 /**
  *
@@ -374,6 +375,8 @@ static int nvmm_consistency_function(struct super_block *sb, struct inode *norma
 	void *con_write_start_vaddr;
 	unsigned long page_num_mask = 0;
 	int retval = 0;
+	//为了计算结束拷贝长度设置的临时变量 2015.12.02
+	loff_t end_copy_size = 0;
 	loff_t size = i_size_read(normal_i);
 	consistency_i = NVMM_SB(sb)->consistency_i;
 	con_nvmm_inode = nvmm_get_inode(sb, consistency_i->i_ino);
@@ -399,16 +402,26 @@ static int nvmm_consistency_function(struct super_block *sb, struct inode *norma
 		goto out;
 	}
 
-	//3. calculate copy data
+	//3. calculate copy data position
+	//just calculate the end copy position in normal file, copy data or not is decided later
+	
+	end_normal_cp_addr = offset + length;
+
 	if(1 == page_num_mask){
 		start_cp_addr = offset & PAGE_MASK;
-		con_write_start_vaddr = (void *)(consistency_vaddr + (offset & PAGE_SIZE_1));
+		con_write_start_vaddr = (void *)(consistency_vaddr + (offset & ~PAGE_MASK));
+		end_con_cp_addr = end_normal_cp_addr & ~PAGE_MASK;
+		end_copy_size = (size < PAGE_SIZE) ? size : PAGE_SIZE;
 	}else if(0x1ff == page_num_mask){
 		start_cp_addr = offset & PMD_MASK;
-		con_write_start_vaddr = (void *)(consistency_vaddr + (offset & PMD_SIZE_1));
+		con_write_start_vaddr = (void *)(consistency_vaddr + (offset & ~PMD_MASK));
+		end_con_cp_addr = end_normal_cp_addr & ~PMD_MASK;
+		end_copy_size = (size < PMD_SIZE) ? size : PMD_SIZE;
 	}else if(0x3ffff == page_num_mask){
 		start_cp_addr = offset & PUD_MASK;
-		con_write_start_vaddr = (void *)(consistency_vaddr + (offset & PUD_SIZE_1));
+		con_write_start_vaddr = (void *)(consistency_vaddr + (offset & ~PUD_MASK));
+		end_con_cp_addr = end_normal_cp_addr & ~PUD_MASK;
+		end_copy_size = (size < PUD_SIZE) ? size : PUD_SIZE;
 	}else if(0x7ffffff == page_num_mask){
 		start_cp_addr = offset & PGDIR_MASK;
 		nvmm_iov_copy_from((void *)normal_vaddr + offset, iter, length);
@@ -420,9 +433,7 @@ static int nvmm_consistency_function(struct super_block *sb, struct inode *norma
 	//length = end_position - start_position + 1, but offset is the write position so do not need
 	start_cp_length = offset - start_cp_addr;
 	if(offset + length < size){
-		end_normal_cp_addr = offset + length;
-		end_con_cp_addr = end_normal_cp_addr & page_num_mask;
-		end_cp_length = size - end_normal_cp_addr;
+		end_cp_length = end_copy_size - end_con_cp_addr;
 	}
 
 	//4. copy data 
@@ -444,6 +455,8 @@ static int nvmm_consistency_function(struct super_block *sb, struct inode *norma
 	if(0x7ffffff == page_num_mask){
 		pud_t *pud = nvmm_get_pud(sb, normal_i->i_ino);
 		nvmap(normal_vaddr, pud, current->mm);
+	}else{
+		nvmm_rm_file_pages(sb, consistency_i->i_ino);
 	}
 		
 out :

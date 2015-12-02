@@ -315,6 +315,7 @@ extern int nvmm_establish_mapping(struct inode *inode);
 extern int nvmm_insert_page(struct super_block *sb, struct inode *inode, struct page *pg);
 extern int nvmm_destroy_mapping(struct inode *inode);
 extern void nvmm_rm_pg_table(struct super_block *sb, u64 ino);
+extern void nvmm_rm_file_pages(struct super_block *sb, u64 ino);
 extern pud_t* nvmm_get_pud(struct super_block *sb, u64 ino);
 extern int nvmm_init_pg_table(struct super_block *sb, u64 ino);
 extern int nvmm_mapping_file(struct inode *inode);
