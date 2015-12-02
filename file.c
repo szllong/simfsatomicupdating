@@ -298,7 +298,7 @@ static void nvmm_atomic_update_pointer(struct super_block *sb, struct inode *nor
 	pmd_t *pmd_normal, *pmd_con;
 	pte_t *pte_normal, *pte_con;
 	struct page *pg_normal, *pg_con;
-
+	int a,b;
 	pud_normal = nvmm_get_pud(sb, normal_i->i_ino);
 	pud_normal += (offset >> PUD_SHIFT);
 	pud_con = nvmm_get_pud(sb, consistency_i->i_ino);
@@ -308,47 +308,61 @@ static void nvmm_atomic_update_pointer(struct super_block *sb, struct inode *nor
 
 	if(1 == page_num_mask){
 		if(pud_none(*pud_normal)){
-			nvmm_setup_pud(pud_normal, pmd_con);
-			pud_clear(pud_con);
+//			nvmm_setup_pud(pud_normal, pmd_con);
+//			pud_clear(pud_con);
+			a = 5;
+			b = 6;
 		}else{
 			pmd_normal = pmd_offset(pud_normal, offset);
 			if(pmd_none(*pmd_normal)){
-				nvmm_setup_pmd(pmd_normal, pte_con);
-				pmd_clear(pmd_con);
+//				nvmm_setup_pmd(pmd_normal, pte_con);
+//				pmd_clear(pmd_con);
+				a = 5;
+				b = 6;
 			}else{
 				pte_normal = pte_offset_kernel(pmd_normal, offset);
 				if(!pte_none(*pte_normal)){
 					pg_normal = nvmm_get_pte_entry(pte_normal);
-					nvmm_setup_pte(pte_con, pg_normal);
+//					nvmm_setup_pte(pte_con, pg_normal);
 				}else{
-					set_pte(pte_con, __pte(0));
+//					set_pte(pte_con, __pte(0));
+					b = 6;
 				}
-				nvmm_setup_pte(pte_normal, pg_con);
+//				nvmm_setup_pte(pte_normal, pg_con);
+				a = 5;
 			}
 		}
 		
 	}else if(0x1ff == page_num_mask){
 		if(pud_none(*pud_normal)){
-			nvmm_setup_pud(pud_normal, pmd_con);
-			pud_clear(pud_con);
+//			nvmm_setup_pud(pud_normal, pmd_con);
+//			pud_clear(pud_con);
+			a = 5;
+			b = 6;
 		}else{
 			pmd_normal = pmd_offset(pud_normal, offset);
 			if(!pmd_none(*pmd_normal)){
 				pte_normal = pte_offset_kernel(pmd_normal, offset);
-				nvmm_setup_pmd(pmd_con, pte_normal);
+//				nvmm_setup_pmd(pmd_con, pte_normal);
+				b = 6;
 			}else{
-				pmd_clear(pmd_con);
+//				pmd_clear(pmd_con);
+				a = 5;
 			}
-			nvmm_setup_pmd(pmd_normal, pte_con);
+//			nvmm_setup_pmd(pmd_normal, pte_con);
+			b = 6;
 		}
 	}else if(0x3ffff == page_num_mask){
 		if(!pud_none(*pud_normal)){
 			pmd_normal = pmd_offset(pud_normal, offset);
-			nvmm_setup_pud(pud_con, pmd_normal);
+//			nvmm_setup_pud(pud_con, pmd_normal);
+			a = 5;
 		}else{
-			pud_clear(pud_con);
+//			pud_clear(pud_con);
+			b = 6;
 		}
-		nvmm_setup_pud(pud_normal, pmd_con);
+//		nvmm_setup_pud(pud_normal, pmd_con);
+		a = 5;
 	}else{
 		nvmm_error(sb, __FUNCTION__, "atomic update pointer error");
 	}
@@ -505,7 +519,7 @@ ssize_t nvmm_direct_IO(int rw, struct kiocb *iocb,
 			}
 		}		
 	}else if(rw == WRITE) {
-/**        pages_needed = ((offset + length + sb->s_blocksize - 1) >> sb->s_blocksize_bits);
+		pages_needed = ((offset + length + sb->s_blocksize - 1) >> sb->s_blocksize_bits);
         pages_exist = (size + sb->s_blocksize - 1) >> sb->s_blocksize_bits;
         pages_to_alloc = pages_needed - pages_exist;
 
@@ -518,16 +532,13 @@ ssize_t nvmm_direct_IO(int rw, struct kiocb *iocb,
 				goto out;
 			}
 		}
-*/
-		nvmm_alloc_blocks(inode, 0);
+		//consistency function
 		nvmm_consistency_function(sb, inode, offset, length, &iter);
-		retval = length;
-/*		retval = nvmm_iov_copy_from(start_vaddr, &iter, length);
+		retval = nvmm_iov_copy_from(start_vaddr, &iter, length);
 		if(retval != length){
 			retval = -EFAULT;
 			goto out;
 		}
-*/
 	}
 
 out :
