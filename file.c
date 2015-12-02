@@ -175,8 +175,8 @@ static int nvmm_release_file(struct file * file)
 		if(atomic_dec_and_test(&ni_info->i_p_counter)){
 			err = nvmm_destroy_mapping(inode);
 			err = nvmm_destroy_mapping(consistency_i);
-			nvmm_rm_pg_table(sb, consistency_i->i_ino);
-			consistency_i->i_blocks = 0;
+//			nvmm_rm_pg_table(sb, consistency_i->i_ino);
+//			consistency_i->i_blocks = 0;
 		}
 
 //		printk("release, ino = %ld, process num = %d, vaddr = %lx\n", inode->i_ino, (ni_info->i_p_counter).counter, vaddr);
@@ -263,9 +263,9 @@ static int nvmm_alloc_consistency_file_pages(struct inode *consistency_i , loff_
 		pages_to_alloc = (size + PAGE_SIZE - 1) >> PAGE_SHIFT;
 	}
 	
-	pages_to_alloc &= page_num_mask;
-	if(0 == pages_to_alloc)
-		pages_to_alloc = (1 == page_num_mask) ? page_num_mask : (page_num_mask + 1);
+//	pages_to_alloc &= page_num_mask;
+//	if(0 == pages_to_alloc)
+	pages_to_alloc = (1 == page_num_mask) ? page_num_mask : (page_num_mask + 1);
 
 	if(consistency_i->i_blocks < pages_to_alloc)
 		retval = nvmm_alloc_blocks(consistency_i, pages_to_alloc);
@@ -471,14 +471,14 @@ static int nvmm_consistency_function(struct super_block *sb, struct inode *norma
 	}
 	nvmm_iov_copy_from(con_write_start_vaddr, iter, length);
 	//5. get atomic updating pointer and update it
-	nvmm_atomic_update_pointer(sb, normal_i, consistency_i, offset, page_num_mask);	
+//	nvmm_atomic_update_pointer(sb, normal_i, consistency_i, offset, page_num_mask);	
 
 	//6. delete temp file inode
 	if(0x7ffffff == page_num_mask){
 		pud_t *pud = nvmm_get_pud(sb, normal_i->i_ino);
 		nvmap(normal_vaddr, pud, current->mm);
 	}else{
-		nvmm_rm_file_pages(sb, consistency_i->i_ino);
+		nvmm_rm_pg_table(sb, consistency_i->i_ino);
 		consistency_i->i_blocks = 0;
 	}
 	kfree(temp_page);
