@@ -384,11 +384,15 @@ static int nvmm_consistency_function(struct super_block *sb, struct inode *norma
 	struct nvmm_inode *con_nvmm_inode;
 	struct nvmm_inode_info *normal_i_info, *consistency_i_info;
 	unsigned long normal_vaddr, consistency_vaddr;
-	unsigned long start_cp_addr, start_cp_length, end_normal_cp_addr, end_con_cp_addr, end_cp_length;
+	unsigned long start_cp_addr, end_normal_cp_addr, end_con_cp_addr;
+	int start_cp_length = 0, end_cp_length = 0;
 	void *copy_start_normal_vaddr, *copy_end_normal_vaddr, *copy_start_con_vaddr, *copy_end_con_vaddr;
 	void *con_write_start_vaddr;
 	unsigned long page_num_mask = 0;
 	int retval = 0;
+	void *temp_page;
+	unsigned long temp_length;
+	temp_page = kmalloc(8192, GFP_KERNEL);
 	//为了计算结束拷贝长度设置的临时变量 2015.12.02
 	loff_t end_copy_size = 0;
 	loff_t size = i_size_read(normal_i);
@@ -455,11 +459,15 @@ static int nvmm_consistency_function(struct super_block *sb, struct inode *norma
 	copy_start_con_vaddr = (void *)(consistency_vaddr);
 	copy_end_normal_vaddr = (void *)(normal_vaddr + end_normal_cp_addr);
 	copy_end_con_vaddr = (void *)(consistency_vaddr + end_con_cp_addr);
-	if(start_cp_length > 0){
-		memcpy(copy_start_con_vaddr, copy_start_normal_vaddr, start_cp_length);
+	while(start_cp_length > 0){
+		temp_length = start_cp_length < PAGE_SIZE ? start_cp_length : PAGE_SIZE;
+		//memcpy(temp_page, copy_start_normal_vaddr, temp_length);
+		start_cp_length -= PAGE_SIZE;
 	}
-	if(offset + length < size){
-		memcpy(copy_end_con_vaddr, copy_end_normal_vaddr, end_cp_length);
+	while(end_cp_length > 0){
+		temp_length = end_cp_length > PAGE_SIZE ? end_cp_length : PAGE_SIZE;
+		//memcpy(temp_page, copy_end_normal_vaddr, temp_length);
+		end_cp_length -= PAGE_SIZE;
 	}
 	nvmm_iov_copy_from(con_write_start_vaddr, iter, length);
 	//5. get atomic updating pointer and update it
@@ -471,7 +479,9 @@ static int nvmm_consistency_function(struct super_block *sb, struct inode *norma
 		nvmap(normal_vaddr, pud, current->mm);
 	}else{
 		nvmm_rm_file_pages(sb, consistency_i->i_ino);
+		consistency_i->i_blocks = 0;
 	}
+	kfree(temp_page);
 		
 out :
 	return retval;
@@ -490,7 +500,7 @@ ssize_t nvmm_direct_IO(int rw, struct kiocb *iocb,
 	loff_t size;
 	void *start_vaddr = NVMM_I(inode)->i_virt_addr + offset;
 	size_t length = iov_length(iov, nr_segs);
-//	unsigned long pages_exist = 0, pages_to_alloc = 0,pages_needed = 0;        
+	unsigned long pages_exist = 0, pages_to_alloc = 0,pages_needed = 0;        
 
 	if(rw == READ)
 		rcu_read_lock();
